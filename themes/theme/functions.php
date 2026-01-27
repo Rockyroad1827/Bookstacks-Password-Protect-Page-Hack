@@ -1,6 +1,6 @@
 <?php
 // --------------------------------------------------------------------------------
-//RAW SERVER INTERCEPT
+// RAW SERVER INTERCEPT
 // --------------------------------------------------------------------------------
 // Immediately blocks any search request for "Protected"
 // If found, redirects to home to prevent leaking hidden pages.
@@ -15,14 +15,12 @@ if (isset($_SERVER['REQUEST_URI'])) {
 
 use BookStack\Entities\Models\Page;
 use BookStack\Facades\Theme;
-use BookStack\Facades\ThemeEvents;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 
-
 // --------------------------------------------------------------------------------
-// BACKEND ROUTES
+// BACKEND ROUTES (PIN LOGIC)
 // --------------------------------------------------------------------------------
 if (!app()->routesAreCached()) {
     // Check PIN
@@ -34,11 +32,9 @@ if (!app()->routesAreCached()) {
         $masterPin = env('SECURE_PAGE_PIN');
         $targetPin = $masterPin; 
         
-        // If checking a specific page, look for custom password tag
         if ($pageId) {
             $page = Page::find($pageId);
             if ($page) {
-                // We use the relation directly to bypass any view filters
                 $tag = $page->tags()->where('name', 'Protected')->first();
                 if ($tag && !empty($tag->value)) {
                     $targetPin = $tag->value;
@@ -92,7 +88,6 @@ if (!function_exists('renderSecureLockScreen')) {
     function renderSecureLockScreen($title = 'Protected Content', $pageId = null) {
         $errorHtml = Session::has('pin_error') ? 
             '<div class="text-neg bold mb-m" style="background: #ffebeb; border: 1px solid #cb2431; padding: 10px; border-radius: 4px;">' . Session::get('pin_error') . '</div>' : '';
-        
         $pageIdInput = $pageId ? '<input type="hidden" name="page_id" value="' . $pageId . '">' : '';
 
         return '
@@ -100,10 +95,10 @@ if (!function_exists('renderSecureLockScreen')) {
             <div class="card content-wrap auto-height" style="max-width: 500px; width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <div class="text-center mb-l">
                     <div style="width: 80px; height: 80px; background-color: var(--color-primary); color: #FFF; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                        <svg fill="currentColor" width="40" height="40" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                         <svg fill="currentColor" width="40" height="40" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
                     </div>
                     <h1 class="list-heading text-xl mb-s">' . $title . '</h1>
-                    <p class="text-muted">This page is password protected. Please enter the access code below.</p>
+                    <p class="text-muted">This page is password protected.</p>
                 </div>
                 ' . $errorHtml . '
                 <form method="POST" action="/secure-pin-check" class="stretch-inputs">
@@ -126,7 +121,7 @@ if (!function_exists('renderSecureLockScreen')) {
 }
 
 // --------------------------------------------------------------------------------
-// INTERCEPTOR: SINGLE PAGE VIEW (Render Lock Screen)
+// SINGLE PAGE VIEW INTERCEPTOR
 // --------------------------------------------------------------------------------
 View::composer(['pages.show', 'pages.edit'], function ($view) {
     $data = $view->getData();
@@ -138,7 +133,6 @@ View::composer(['pages.show', 'pages.edit'], function ($view) {
     $isUnlocked = (Session::get('secure_access_expiry', 0) > time());
 
     if ($isProtected && !$isUnlocked) {
-        // If trying to Edit while locked, bounce back to view (which then shows lock screen)
         if ($view->getName() === 'pages.edit') { 
             header("Location: " . $page->getUrl()); 
             exit(); 
@@ -148,15 +142,31 @@ View::composer(['pages.show', 'pages.edit'], function ($view) {
 });
 
 // --------------------------------------------------------------------------------
-// SERVER-SIDE TAG FILTER (Hides it from READ View & SEARCH Results only)
+// LIST VIEW SCRUBBER (Clears preview text for Books & Chapters)
 // --------------------------------------------------------------------------------
-// We target 'pages.show' (Read Mode) and 'partials.entity-list-item' (Search Results/Lists).
-// We do NOT target 'pages.edit', so the tag remains visible in the editor.
-View::composer(['pages.show', 'partials.entity-list-item'], function ($view) {
+View::composer([
+    'partials.entity-list-item',      // Search Results & Tag Lists
+    'partials.page-list-item',        // Standard Page Lists
+    'partials.book-content-list-item' // <--- THIS IS THE KEY VIEW FOR BOOKS/CHAPTERS
+], function ($view) {
     $data = $view->getData();
-    $entity = $data['page'] ?? $data['entity'] ?? null;
+    // Normalize the entity variable
+    $entity = $data['entity'] ?? $data['page'] ?? null;
+
     if ($entity && isset($entity->tags)) {
-        // Filter the tags collection in memory
+        // 1. Check Database Tags
+        $hasProtectedTag = $entity->tags->contains(function($tag) {
+            return strtolower($tag->name) === 'protected';
+        });
+
+        if ($hasProtectedTag) {
+            // 2. Clear content so the preview generator has nothing to work with
+            $entity->text = '';
+            $entity->html = '';
+            $entity->preview_html = '';
+        }
+
+        // 3. Remove the tag itself from the display list
         $entity->tags = $entity->tags->filter(function($tag) {
             return strtolower($tag->name) !== 'protected';
         });
