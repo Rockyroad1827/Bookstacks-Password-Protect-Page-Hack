@@ -74,15 +74,6 @@
             }
         });
     });
-    </script>
-</div>
-<div class="print-hidden">
-    <footer class="px-xl py-m mt-xl border-top text-muted text-small">
-        <div class="container">
-            <p>&copy; BookStack</p>
-        </div>
-    </footer>
-    <script>
     document.addEventListener("DOMContentLoaded", function() {
         // The trigger text/symbol to look for in the Title
         // You can change this to "Protected" if you prefer text over the emoji
@@ -111,4 +102,4 @@
         });
     });
     </script>
-</div>div>
+</div>
