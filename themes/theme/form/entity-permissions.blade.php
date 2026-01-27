@@ -1,6 +1,45 @@
 <?php
 /** @var \BookStack\Permissions\PermissionFormData $data */
+
+// --- AUTO-RENAME & STATUS LOGIC ---
+$isProtected = false;
+$hasCustomPass = false;
+
+if($model instanceof \BookStack\Entities\Models\Page) {
+    // 1. Check for the tag
+    $tag = $model->tags()->where('name', 'Protected')->first();
+    $isProtected = !is_null($tag);
+    $hasCustomPass = $isProtected && !empty($tag->value);
+
+    // 2. Check if the actual Page Name needs updating in the DB
+    $currentName = $model->name;
+    $lockSymbol = '🔒'; 
+    $hasLockSymbol = strpos($currentName, $lockSymbol) !== false;
+    $nameChanged = false;
+
+    // Case A: Protected, but missing the symbol -> Rename to add it
+    if ($isProtected && !$hasLockSymbol) {
+        $model->name = trim($currentName) . ' ' . $lockSymbol;
+        $nameChanged = true;
+    }
+    // Case B: Not Protected, but still has symbol -> Rename to remove it
+    elseif (!$isProtected && $hasLockSymbol) {
+        $model->name = trim(str_replace($lockSymbol, '', $currentName));
+        $nameChanged = true;
+    }
+
+    // 3. Save changes to Database if needed
+    if ($nameChanged) {
+        $model->save();
+        // Update the $title variable locally for this specific view render
+        // so it matches the new database value immediately
+        if (isset($title)) {
+             $title = $model->name; 
+        }
+    }
+}
 ?>
+
 {{-- MAIN PERMISSIONS FORM --}}
 <form component="entity-permissions"
       option:entity-permissions:entity-type="{{ $model->getType() }}"
@@ -12,7 +51,9 @@
 
     <div class="grid half left-focus v-end gap-m wrap">
         <div>
+            {{-- Display the (potentially updated) title --}}
             <h1 class="list-heading">{{ $title }}</h1>
+            
             <p class="text-muted mb-s">
                 {{ trans('entities.permissions_desc') }}
                 @if($model instanceof \BookStack\Entities\Models\Book)
@@ -74,11 +115,6 @@
 
     {{-- NATIVE-STYLE PIN CONTROL --}}
     @if($model instanceof \BookStack\Entities\Models\Page)
-        @php
-            $tag = $model->tags()->where('name', 'Protected')->first();
-            $isProtected = !is_null($tag);
-            $hasCustomPass = $isProtected && !empty($tag->value);
-        @endphp
         <div class="mb-m mt-l">
             <div class="card p-m" style="border: 1px solid #ddd; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div class="flex-container-row justify-space-between items-center wrap gap-m">
@@ -110,7 +146,6 @@
                     <div>
                         @if($isProtected)
                             {{-- UNLOCK BUTTON --}}
-                            {{-- Notice form="form-secure-unlock" --}}
                             <div style="text-align: right;">
                                 <button type="submit" form="form-secure-unlock" class="button outline small" style="color: #c0392b; border-color: #c0392b;">
                                     @icon('close') Disable Lock
@@ -118,7 +153,6 @@
                             </div>
                         @else
                             {{-- LOCK FORM with Input --}}
-                            {{-- Notice form="form-secure-lock" on BOTH elements --}}
                             <div class="flex-container-row gap-s items-center">
                                 <input type="text" name="custom_password" form="form-secure-lock" placeholder="Custom Password (Optional)" class="input-base small" style="width: 200px; margin:0;" autocomplete="off">
                                 <button type="submit" form="form-secure-lock" class="button small" style="background-color: #27ae60; border-color: #27ae60; color: #fff;">
@@ -152,13 +186,13 @@
 </form>
 
 {{-- 
-    HIDDEN FORMS (Must be OUTSIDE the main form) 
-    The buttons above target these IDs using the 'form=' attribute.
+    HIDDEN FORMS
 --}}
 @if($model instanceof \BookStack\Entities\Models\Page)
     <form id="form-secure-lock" action="/secure-lock-page" method="POST" style="display: none;">
         {!! csrf_field() !!}
         <input type="hidden" name="page_id" value="{{ $model->id }}">
+        {{-- Redirect back to this permissions page so the Rename Logic at the top runs immediately --}}
         <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
     </form>
 
