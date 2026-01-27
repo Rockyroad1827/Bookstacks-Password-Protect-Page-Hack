@@ -66,7 +66,7 @@ cd <bookstack root directory>
 php manage-locks.php
 ```
 
-> [!WARNING]
+> [!INFO]
 > When you run the script, you will see a list of all currently protected pages:
 
 ```Plaintext
@@ -92,7 +92,7 @@ Current Password: secret123
 Enter NEW password (leave empty to use Master PIN, or type 'DELETE' to unlock):
 Options:
 ```
-`Type a new password: Updates the lock to the new code.`
+Type a new password: Updates the lock to the new code.
 
 Press `Enter` (Empty): Sets the page to use the global Master PIN.
 
