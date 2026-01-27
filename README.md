@@ -92,8 +92,8 @@ Current Password: secret123
 Enter NEW password (leave empty to use Master PIN, or type 'DELETE' to unlock):
 Options:
 ```
-Type a new password: Updates the lock to the new code.
+`Type a new password: Updates the lock to the new code.`
 
-Press Enter (Empty): Sets the page to use the global Master PIN.
+Press `Enter` (Empty): Sets the page to use the global Master PIN.
 
 Type `DELETE`: Removes the lock entirely and makes the page public again.
