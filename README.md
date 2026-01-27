@@ -68,7 +68,7 @@ php manage-locks.php
 > [!WARNING]
 > When you run the script, you will see a list of all currently protected pages:
 
-Plaintext
+```Plaintext
 🔒 BookStack Secure Page Manager
 ================================
 ID    | Page Title                               | Current Password    
@@ -76,20 +76,21 @@ ID    | Page Title                               | Current Password
 [1]   | Server Access Codes 🔒                  | [Master PIN]        
 [2]   | HR Confidential 🔒                      | secret123           
 ----------------------------------------------------------------------
-
+```
+```plaintext
 Select a page number to edit (or press Enter to exit): 
 To Edit a Lock:
 
 Type the ID number (e.g., 2) and press Enter.
-
+```
 The script will show the current status and ask for a new password.
 
-Plaintext
+```Plaintext
 Selected: HR Confidential 🔒
 Current Password: secret123
 Enter NEW password (leave empty to use Master PIN, or type 'DELETE' to unlock):
 Options:
-
+```
 Type a new password: Updates the lock to the new code.
 
 Press Enter (Empty): Sets the page to use the global Master PIN.
