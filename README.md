@@ -96,4 +96,4 @@ Type a new password: Updates the lock to the new code.
 
 Press Enter (Empty): Sets the page to use the global Master PIN.
 
-Type DELETE: Removes the lock entirely and makes the page public again.
+Type `DELETE`: Removes the lock entirely and makes the page public again.
