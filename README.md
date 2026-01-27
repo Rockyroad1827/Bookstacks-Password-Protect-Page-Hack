@@ -65,7 +65,7 @@ cd <bookstack root directory>
 php manage-locks.php
 ```
 
-> [!Interactive-Walkthrough]
+> [!WARNING]
 > When you run the script, you will see a list of all currently protected pages:
 
 Plaintext
