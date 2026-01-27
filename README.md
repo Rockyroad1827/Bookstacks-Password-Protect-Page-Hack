@@ -1,6 +1,7 @@
 # BookStack Page Lock & PIN Protection
 
 ![BookStack](https://img.shields.io/badge/BookStack-Addon-0288D1?style=flat-square&logo=bookstack&logoColor=white)
+![BookStack](https://img.shields.io/badge/BookStack-version 25.12.2-0288D1?style=flat-square&logo=bookstack&logoColor=white)
 ![PHP](https://img.shields.io/badge/PHP-8.0%2B-777BB4?style=flat-square&logo=php&logoColor=white)
 ![Security](https://img.shields.io/badge/Security-PIN_Lock-critical?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
