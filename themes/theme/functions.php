@@ -15,6 +15,7 @@ if (isset($_SERVER['REQUEST_URI'])) {
 
 use BookStack\Entities\Models\Page;
 use BookStack\Facades\Theme;
+use BookStack\Facades\ThemeEvents;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
