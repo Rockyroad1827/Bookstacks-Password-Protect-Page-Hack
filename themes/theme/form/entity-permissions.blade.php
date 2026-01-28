@@ -6,29 +6,29 @@ $isProtected = false;
 $hasCustomPass = false;
 
 if($model instanceof \BookStack\Entities\Models\Page) {
-    // 1. Check for the tag
+    // Check for the tag
     $tag = $model->tags()->where('name', 'Protected')->first();
     $isProtected = !is_null($tag);
     $hasCustomPass = $isProtected && !empty($tag->value);
 
-    // 2. Check if the actual Page Name needs updating in the DB
+    // Check if the actual Page Name needs updating in the DB
     $currentName = $model->name;
     $lockSymbol = '🔒'; 
     $hasLockSymbol = strpos($currentName, $lockSymbol) !== false;
     $nameChanged = false;
 
-    // Case A: Protected, but missing the symbol -> Rename to add it
+    // Protected, but missing the symbol -> Rename to add it
     if ($isProtected && !$hasLockSymbol) {
         $model->name = trim($currentName) . ' ' . $lockSymbol;
         $nameChanged = true;
     }
-    // Case B: Not Protected, but still has symbol -> Rename to remove it
+    // Not Protected, but still has symbol -> Rename to remove it
     elseif (!$isProtected && $hasLockSymbol) {
         $model->name = trim(str_replace($lockSymbol, '', $currentName));
         $nameChanged = true;
     }
 
-    // 3. Save changes to Database if needed
+    // Save changes to Database if needed
     if ($nameChanged) {
         $model->save();
         // Update the $title variable locally for this specific view render
