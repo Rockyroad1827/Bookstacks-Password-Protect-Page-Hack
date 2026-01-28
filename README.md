@@ -10,7 +10,7 @@ A lightweight, PIN-based protection layer for [BookStack](https://www.bookstacka
 
 ---
 
-## 🚀 Features
+## Features
 
 * **Per-Page Locking:** Secure specific pages without altering global role permissions.
 * **Dual PIN Modes:** Pages can use a specific "Custom Password" or fall back to a global "Master PIN" defined in your `.env` file.
@@ -21,7 +21,7 @@ A lightweight, PIN-based protection layer for [BookStack](https://www.bookstacka
 
 ---
 
-## 🛠️ Installation
+## Installation
 
 ### 1. File Placement
 This guide assumes you are using the [BookStack Logical Theme System](https://www.bookstackapp.com/docs/admin/themes/). Replace `themes/my-theme/` with your actual theme folder.
