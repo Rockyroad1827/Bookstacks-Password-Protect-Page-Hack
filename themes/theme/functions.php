@@ -1,6 +1,6 @@
 <?php
 // --------------------------------------------------------------------------------
-// RAW SERVER INTERCEPT
+// Page Protection Logic for blocking Protected Tag Search
 // --------------------------------------------------------------------------------
 // Immediately blocks any search request for "Protected"
 // If found, redirects to home to prevent leaking hidden pages.
@@ -12,13 +12,15 @@ if (isset($_SERVER['REQUEST_URI'])) {
         exit();
     }
 }
-
 use BookStack\Entities\Models\Page;
 use BookStack\Facades\Theme;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 
+///////////////////////////////////////////////////////////////////////////////////
+//Page Lock
+///////////////////////////////////////////////////////////////////////////////////
 // --------------------------------------------------------------------------------
 // BACKEND ROUTES (PIN LOGIC)
 // --------------------------------------------------------------------------------
