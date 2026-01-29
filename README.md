@@ -76,9 +76,10 @@ ID    | Page Title                               | Current Password
 [1]   | Server Access Codes 🔒                  | [Master PIN]        
 [2]   | HR Confidential 🔒                      | secret123           
 ----------------------------------------------------------------------
+Current .env Master PIN: ****
 ```
 ```plaintext
-Select a page number to edit (or press Enter to exit): 
+Enter Page ID to edit, "M" to Change Master PIN, or press Enter to exit: 
 To Edit a Lock:
 
 Type the ID number (e.g., 2) and press Enter.
@@ -96,3 +97,9 @@ Type a new password: Updates the lock to the new code.
 Press `Enter` (Empty): Sets the page to use the global Master PIN.
 
 Type `DELETE`: Removes the lock entirely and makes the page public again.
+
+```plaintext
+To Edit the master pin:
+
+Type "M" and follow the prompts
+```
