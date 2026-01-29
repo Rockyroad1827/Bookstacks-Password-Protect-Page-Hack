@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Routing\Events\RouteMatched;
 
 // --------------------------------------------------------------------------------
-// 1. SEARCH BLOCKER (Raw Request Intercept)
+// Page Lock SEARCH BLOCKER (Raw Request Intercept)
 // --------------------------------------------------------------------------------
 // Immediately blocks search requests for "Protected" tags to prevent leaks.
 if (isset($_SERVER['REQUEST_URI'])) {
@@ -58,22 +58,22 @@ Event::listen(RouteMatched::class, function (RouteMatched $event) {
     $request = request();
     $path = $request->path();
 
-    // 1. Check if this is an export URL
+    // Check if this is an export URL
     if (strpos($path, '/export/') !== false) {
         
-        // 2. Try to find the Page Slug in the route parameters
+        // Try to find the Page Slug in the route parameters
         // BookStack usually names this parameter 'pageSlug' or 'page'
         $slug = $event->route->parameter('pageSlug');
 
         if ($slug) {
-            // 3. Find the page in the DB
+            // Find the page in the DB
             $page = Page::where('slug', $slug)->first();
 
-            // 4. Check if Page exists, is Protected, and is NOT unlocked
+            // Check if Page exists, is Protected, and is NOT unlocked
             if ($page && $page->tags()->where('name', 'Protected')->exists()) {
                 if (!isPageUnlocked($page->id)) {
                     
-                    // 5. Block Download & Redirect to Lock Screen
+                    // Block Download & Redirect to Lock Screen
                     // We attach the CURRENT export URL as the "redirect_after_unlock" target.
                     // Once unlocked, the user will be bounced right back here to start the download.
                     $currentExportUrl = $request->fullUrl();
@@ -285,3 +285,45 @@ if (app()->runningInConsole()) {
         });
     }
 }
+// --------------------------------------------------------------------------------
+// PARENT DELETION BLOCKER (Shelves, Books, Chapters)
+// --------------------------------------------------------------------------------
+// Prevents deletion if the entity contains any "Protected" pages.
+View::composer(['shelves.delete', 'books.delete', 'chapters.delete'], function ($view) {
+    $data = $view->getData();
+    $entity = null;
+    $protectedCount = 0;
+
+    // Identify Entity Type and Count Protected Children
+    if (isset($data['shelf'])) {
+        $entity = $data['shelf'];
+        foreach ($entity->books as $book) {
+            $protectedCount += $book->pages()->whereHas('tags', function($q){
+                $q->where('name', 'Protected');
+            })->count();
+        }
+    } elseif (isset($data['book'])) {
+        $entity = $data['book'];
+        $protectedCount = $entity->pages()->whereHas('tags', function($q){
+            $q->where('name', 'Protected');
+        })->count();
+    } elseif (isset($data['chapter'])) {
+        $entity = $data['chapter'];
+        $protectedCount = $entity->pages()->whereHas('tags', function($q){
+            $q->where('name', 'Protected');
+        })->count();
+    }
+
+    // If protected content is found, block access
+    if ($entity && $protectedCount > 0) {
+        // FLASH A SPECIAL SESSION KEY TO TRIGGER THE POPUP
+        Session::flash('protected_deletion_blocked', $protectedCount);
+        
+        // CRITICAL FIX: Force Laravel to write the session before we exit
+        Session::save();
+        
+        // Redirect back to the entity page
+        header("Location: " . $entity->getUrl());
+        exit();
+    }
+});
