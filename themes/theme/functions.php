@@ -92,6 +92,14 @@ if (!function_exists('renderSecureLockScreen')) {
             '<div class="text-neg bold mb-m" style="background: #ffebeb; border: 1px solid #cb2431; padding: 10px; border-radius: 4px;">' . Session::get('pin_error') . '</div>' : '';
         $pageIdInput = $pageId ? '<input type="hidden" name="page_id" value="' . $pageId . '">' : '';
 
+        // DETECT REDIRECT INTENT
+        // If the URL has ?redirect_after_unlock=..., we use that as the destination.
+        // Otherwise, we default to the current full URL.
+        $targetRedirect = request()->get('redirect_after_unlock');
+        if (!$targetRedirect) {
+            $targetRedirect = request()->fullUrl();
+        }
+
         return '
         <div class="flex-fill flex-container-column justify-center items-center" style="min-height: 60vh;">
             <div class="card content-wrap auto-height" style="max-width: 500px; width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
@@ -106,7 +114,7 @@ if (!function_exists('renderSecureLockScreen')) {
                 <form method="POST" action="/secure-pin-check" class="stretch-inputs">
                     <input type="hidden" name="_token" value="' . csrf_token() . '">
                     ' . $pageIdInput . '
-                    <input type="hidden" name="redirect_to" value="' . request()->fullUrl() . '">
+                    <input type="hidden" name="redirect_to" value="' . htmlspecialchars($targetRedirect) . '">
                     <div class="form-group mb-l">
                         <label for="pin_code" class="text-muted mb-xs">Access Code</label>
                         <input type="password" id="pin_code" name="pin_code" placeholder="Enter PIN..." class="input-base" style="font-size: 1.1em; padding: 10px;" autofocus>
@@ -140,6 +148,30 @@ View::composer(['pages.show', 'pages.edit'], function ($view) {
             exit(); 
         }
         $page->html = renderSecureLockScreen("Protected Content", $page->id);
+    }
+});
+
+// --------------------------------------------------------------------------------
+// PERMISSIONS VIEW INTERCEPTOR
+// --------------------------------------------------------------------------------
+View::composer(['form.entity-permissions'], function ($view) {
+    $data = $view->getData();
+    $page = $data['model'] ?? null;
+
+    if ($page instanceof \BookStack\Entities\Models\Page) {
+         $isProtected = $page->tags()->where('name', 'Protected')->exists();
+         $isUnlocked = (Session::get('secure_access_expiry', 0) > time());
+
+         if ($isProtected && !$isUnlocked) {
+             // Generate the URL for the permissions page
+             $permissionsUrl = $page->getUrl() . '/permissions';
+             
+             // Send them to the main page lock screen, but attach the permissions URL as the "redirect_after_unlock" target
+             $redirectUrl = $page->getUrl() . '?redirect_after_unlock=' . urlencode($permissionsUrl);
+             
+             header("Location: " . $redirectUrl);
+             exit();
+         }
     }
 });
 
