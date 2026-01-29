@@ -53,7 +53,11 @@ SECURE_PAGE_PIN=123456
 
 The page title will automatically update to include "🔒" to indicate its protected status.
 
-### 4. Usage: CLI Tool 
+### 4. Parent Deletion
+Users will be asked to Unlock, Move or delete locked pages before parents can be deleted (Shelf, Book, Chapter).
+This is to stop abuse of admin permissions if they haven't got access to the Locked file. It also goes under the prosumption that the file is locked for an important reason stopping loss of important data 
+
+### 5. Usage: CLI Tool 
 You can manage locks directly from the terminal using `php artisan bookstack:manage-locks`. This is useful for auditing protected pages, resetting forgotten PINs, or bulk unlocking content.
 
 How to run it
@@ -103,3 +107,5 @@ To Edit the master pin:
 
 Type "M" and follow the prompts
 ```
+
+**Full Changelog**: https://github.com/Rockyroad1827/Bookstacks-Password-Protect-Page-Hack/commits/Bookstack-Hack
