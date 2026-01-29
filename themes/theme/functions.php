@@ -1,7 +1,15 @@
 <?php
+use BookStack\Entities\Models\Page;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Routing\Events\RouteMatched;
+
 // --------------------------------------------------------------------------------
-// Page Protection Logic for blocking Protected Tag Search
+// 1. SEARCH BLOCKER (Raw Request Intercept)
 // --------------------------------------------------------------------------------
+// Immediately blocks search requests for "Protected" tags to prevent leaks.
 if (isset($_SERVER['REQUEST_URI'])) {
     $rawUri = $_SERVER['REQUEST_URI'];
     $decodedUri = rawurldecode($rawUri);
@@ -10,14 +18,9 @@ if (isset($_SERVER['REQUEST_URI'])) {
         exit();
     }
 }
-use BookStack\Entities\Models\Page;
-use BookStack\Facades\Theme;
-use Illuminate\Support\Facades\Session;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\View;
 
 ///////////////////////////////////////////////////////////////////////////////////
-//Page Lock
+// Page Lock Logic
 ///////////////////////////////////////////////////////////////////////////////////
 
 // --------------------------------------------------------------------------------
@@ -48,7 +51,44 @@ if (!function_exists('getSecurePagePin')) {
 }
 
 // --------------------------------------------------------------------------------
-// BACKEND ROUTES (PIN LOGIC)
+// EXPORT INTERCEPTOR (PDF, HTML, TXT, MD, ZIP)
+// --------------------------------------------------------------------------------
+// Listens for ANY route that matches. If the URL contains '/export/', we verify access.
+Event::listen(RouteMatched::class, function (RouteMatched $event) {
+    $request = request();
+    $path = $request->path();
+
+    // 1. Check if this is an export URL
+    if (strpos($path, '/export/') !== false) {
+        
+        // 2. Try to find the Page Slug in the route parameters
+        // BookStack usually names this parameter 'pageSlug' or 'page'
+        $slug = $event->route->parameter('pageSlug');
+
+        if ($slug) {
+            // 3. Find the page in the DB
+            $page = Page::where('slug', $slug)->first();
+
+            // 4. Check if Page exists, is Protected, and is NOT unlocked
+            if ($page && $page->tags()->where('name', 'Protected')->exists()) {
+                if (!isPageUnlocked($page->id)) {
+                    
+                    // 5. Block Download & Redirect to Lock Screen
+                    // We attach the CURRENT export URL as the "redirect_after_unlock" target.
+                    // Once unlocked, the user will be bounced right back here to start the download.
+                    $currentExportUrl = $request->fullUrl();
+                    $lockScreenUrl = $page->getUrl() . '?redirect_after_unlock=' . urlencode($currentExportUrl);
+                    
+                    header("Location: " . $lockScreenUrl);
+                    exit();
+                }
+            }
+        }
+    }
+});
+
+// --------------------------------------------------------------------------------
+// BACKEND ROUTES (PIN VALIDATION)
 // --------------------------------------------------------------------------------
 if (!app()->routesAreCached()) {
     // Check PIN
@@ -66,12 +106,9 @@ if (!app()->routesAreCached()) {
         }
 
         if ($input && $targetPin && (string)$input === (string)$targetPin) {
-            // UPDATED: Store 'Page ID' => 'Expiry Time'
+            // Unlock THIS specific page for 5 seconds
             $unlockedPages = Session::get('secure_unlocked_pages', []);
-            
-            // Set this specific page to expire in 5 seconds
-            $unlockedPages[$pageId] = time() + 5;
-            
+            $unlockedPages[$pageId] = time() + 5; 
             Session::put('secure_unlocked_pages', $unlockedPages);
             Session::save();
             
@@ -120,6 +157,7 @@ if (!function_exists('renderSecureLockScreen')) {
             '<div class="text-neg bold mb-m" style="background: #ffebeb; border: 1px solid #cb2431; padding: 10px; border-radius: 4px;">' . Session::get('pin_error') . '</div>' : '';
         $pageIdInput = $pageId ? '<input type="hidden" name="page_id" value="' . $pageId . '">' : '';
 
+        // Detect Redirect Intent
         $targetRedirect = request()->get('redirect_after_unlock');
         if (!$targetRedirect) {
             $targetRedirect = request()->fullUrl();
@@ -156,45 +194,31 @@ if (!function_exists('renderSecureLockScreen')) {
 }
 
 // --------------------------------------------------------------------------------
-// SINGLE PAGE VIEW INTERCEPTOR
+// VIEW INTERCEPTOR: SHOW PAGE (Main Content)
 // --------------------------------------------------------------------------------
-View::composer(['pages.show', 'pages.edit'], function ($view) {
+View::composer(['pages.show'], function ($view) {
     $data = $view->getData();
     if (!isset($data['page'])) return;
     $page = $data['page'];
     
-    // Check if protected
-    if (!$page->tags()->where('name', 'Protected')->exists()) {
-        return; 
-    }
-
-    // Check if THIS SPECIFIC page is unlocked
-    if (!isPageUnlocked($page->id)) {
-        if ($view->getName() === 'pages.edit') { 
-            header("Location: " . $page->getUrl()); 
-            exit(); 
-        }
+    if ($page->tags()->where('name', 'Protected')->exists() && !isPageUnlocked($page->id)) {
         $page->html = renderSecureLockScreen("Protected Content", $page->id);
     }
 });
 
 // --------------------------------------------------------------------------------
-// PERMISSIONS VIEW INTERCEPTOR
+// VIEW INTERCEPTOR: ACTIONS (Edit, Copy, Move, etc.)
 // --------------------------------------------------------------------------------
-View::composer(['form.entity-permissions'], function ($view) {
+View::composer([
+    'pages.edit', 'pages.move', 'pages.revisions', 'pages.delete', 'pages.copy', 'form.entity-permissions'
+], function ($view) {
     $data = $view->getData();
-    $page = $data['model'] ?? null;
+    $page = $data['page'] ?? $data['model'] ?? null;
 
     if ($page instanceof \BookStack\Entities\Models\Page) {
-         if (!$page->tags()->where('name', 'Protected')->exists()) {
-             return;
-         }
-         
-         // Check if THIS SPECIFIC page is unlocked
-         if (!isPageUnlocked($page->id)) {
-             $permissionsUrl = $page->getUrl() . '/permissions';
-             $redirectUrl = $page->getUrl() . '?redirect_after_unlock=' . urlencode($permissionsUrl);
-             
+         if ($page->tags()->where('name', 'Protected')->exists() && !isPageUnlocked($page->id)) {
+             $currentActionUrl = request()->fullUrl();
+             $redirectUrl = $page->getUrl() . '?redirect_after_unlock=' . urlencode($currentActionUrl);
              header("Location: " . $redirectUrl);
              exit();
          }
@@ -205,9 +229,7 @@ View::composer(['form.entity-permissions'], function ($view) {
 // LIST VIEW SCRUBBER
 // --------------------------------------------------------------------------------
 View::composer([
-    'partials.entity-list-item',
-    'partials.page-list-item',
-    'partials.book-content-list-item'
+    'partials.entity-list-item', 'partials.page-list-item', 'partials.book-content-list-item'
 ], function ($view) {
     $data = $view->getData();
     $entity = $data['entity'] ?? $data['page'] ?? null;
