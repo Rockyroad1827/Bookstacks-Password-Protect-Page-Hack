@@ -2,8 +2,6 @@
 // --------------------------------------------------------------------------------
 // Page Protection Logic for blocking Protected Tag Search
 // --------------------------------------------------------------------------------
-// Immediately blocks any search request for "Protected"
-// If found, redirects to home to prevent leaking hidden pages.
 if (isset($_SERVER['REQUEST_URI'])) {
     $rawUri = $_SERVER['REQUEST_URI'];
     $decodedUri = rawurldecode($rawUri);
@@ -21,6 +19,34 @@ use Illuminate\Support\Facades\View;
 ///////////////////////////////////////////////////////////////////////////////////
 //Page Lock
 ///////////////////////////////////////////////////////////////////////////////////
+
+// --------------------------------------------------------------------------------
+// HELPER: CHECK IF SPECIFIC PAGE IS UNLOCKED
+// --------------------------------------------------------------------------------
+if (!function_exists('isPageUnlocked')) {
+    function isPageUnlocked($pageId) {
+        // Retrieve the list of unlocked pages: [ PageID => Timestamp ]
+        $unlockedPages = Session::get('secure_unlocked_pages', []);
+        
+        // Check if this ID exists and the timestamp is in the future
+        if (isset($unlockedPages[$pageId]) && $unlockedPages[$pageId] > time()) {
+            return true;
+        }
+        return false;
+    }
+}
+
+// --------------------------------------------------------------------------------
+// HELPER: GET REQUIRED PIN
+// --------------------------------------------------------------------------------
+if (!function_exists('getSecurePagePin')) {
+    function getSecurePagePin($page) {
+        $tag = $page->tags()->where('name', 'Protected')->first();
+        if (!$tag) return null;
+        return !empty($tag->value) ? $tag->value : env('SECURE_PAGE_PIN');
+    }
+}
+
 // --------------------------------------------------------------------------------
 // BACKEND ROUTES (PIN LOGIC)
 // --------------------------------------------------------------------------------
@@ -31,22 +57,24 @@ if (!app()->routesAreCached()) {
         $pageId = request()->input('page_id');
         $redirect = request()->input('redirect_to', '/');
         
-        $masterPin = env('SECURE_PAGE_PIN');
-        $targetPin = $masterPin; 
-        
+        $targetPin = env('SECURE_PAGE_PIN');
         if ($pageId) {
             $page = Page::find($pageId);
             if ($page) {
-                $tag = $page->tags()->where('name', 'Protected')->first();
-                if ($tag && !empty($tag->value)) {
-                    $targetPin = $tag->value;
-                }
+                $targetPin = getSecurePagePin($page);
             }
         }
 
         if ($input && $targetPin && (string)$input === (string)$targetPin) {
-            Session::put('secure_access_expiry', time() + 5); 
+            // UPDATED: Store 'Page ID' => 'Expiry Time'
+            $unlockedPages = Session::get('secure_unlocked_pages', []);
+            
+            // Set this specific page to expire in 5 seconds
+            $unlockedPages[$pageId] = time() + 5;
+            
+            Session::put('secure_unlocked_pages', $unlockedPages);
             Session::save();
+            
             return redirect($redirect);
         }
         return redirect($redirect)->with('pin_error', 'Invalid Access Code');
@@ -92,9 +120,6 @@ if (!function_exists('renderSecureLockScreen')) {
             '<div class="text-neg bold mb-m" style="background: #ffebeb; border: 1px solid #cb2431; padding: 10px; border-radius: 4px;">' . Session::get('pin_error') . '</div>' : '';
         $pageIdInput = $pageId ? '<input type="hidden" name="page_id" value="' . $pageId . '">' : '';
 
-        // DETECT REDIRECT INTENT
-        // If the URL has ?redirect_after_unlock=..., we use that as the destination.
-        // Otherwise, we default to the current full URL.
         $targetRedirect = request()->get('redirect_after_unlock');
         if (!$targetRedirect) {
             $targetRedirect = request()->fullUrl();
@@ -138,11 +163,13 @@ View::composer(['pages.show', 'pages.edit'], function ($view) {
     if (!isset($data['page'])) return;
     $page = $data['page'];
     
-    // Check Status
-    $isProtected = $page->tags()->where('name', 'Protected')->exists();
-    $isUnlocked = (Session::get('secure_access_expiry', 0) > time());
+    // Check if protected
+    if (!$page->tags()->where('name', 'Protected')->exists()) {
+        return; 
+    }
 
-    if ($isProtected && !$isUnlocked) {
+    // Check if THIS SPECIFIC page is unlocked
+    if (!isPageUnlocked($page->id)) {
         if ($view->getName() === 'pages.edit') { 
             header("Location: " . $page->getUrl()); 
             exit(); 
@@ -159,14 +186,13 @@ View::composer(['form.entity-permissions'], function ($view) {
     $page = $data['model'] ?? null;
 
     if ($page instanceof \BookStack\Entities\Models\Page) {
-         $isProtected = $page->tags()->where('name', 'Protected')->exists();
-         $isUnlocked = (Session::get('secure_access_expiry', 0) > time());
-
-         if ($isProtected && !$isUnlocked) {
-             // Generate the URL for the permissions page
+         if (!$page->tags()->where('name', 'Protected')->exists()) {
+             return;
+         }
+         
+         // Check if THIS SPECIFIC page is unlocked
+         if (!isPageUnlocked($page->id)) {
              $permissionsUrl = $page->getUrl() . '/permissions';
-             
-             // Send them to the main page lock screen, but attach the permissions URL as the "redirect_after_unlock" target
              $redirectUrl = $page->getUrl() . '?redirect_after_unlock=' . urlencode($permissionsUrl);
              
              header("Location: " . $redirectUrl);
@@ -176,31 +202,27 @@ View::composer(['form.entity-permissions'], function ($view) {
 });
 
 // --------------------------------------------------------------------------------
-// LIST VIEW SCRUBBER (Clears preview text for Books & Chapters)
+// LIST VIEW SCRUBBER
 // --------------------------------------------------------------------------------
 View::composer([
-    'partials.entity-list-item',      // Search Results & Tag Lists
-    'partials.page-list-item',        // Standard Page Lists
-    'partials.book-content-list-item' // <--- THIS IS THE KEY VIEW FOR BOOKS/CHAPTERS
+    'partials.entity-list-item',
+    'partials.page-list-item',
+    'partials.book-content-list-item'
 ], function ($view) {
     $data = $view->getData();
-    // Normalize the entity variable
     $entity = $data['entity'] ?? $data['page'] ?? null;
 
     if ($entity && isset($entity->tags)) {
-        // 1. Check Database Tags
         $hasProtectedTag = $entity->tags->contains(function($tag) {
             return strtolower($tag->name) === 'protected';
         });
 
         if ($hasProtectedTag) {
-            // 2. Clear content so the preview generator has nothing to work with
             $entity->text = '';
             $entity->html = '';
             $entity->preview_html = '';
         }
 
-        // 3. Remove the tag itself from the display list
         $entity->tags = $entity->tags->filter(function($tag) {
             return strtolower($tag->name) !== 'protected';
         });
