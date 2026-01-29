@@ -21,15 +21,6 @@
                     // Hide the tag itself
                     tag.style.display = 'none';
                     tag.dataset.protectedHidden = "true";
-
-                    // Hide the search snippet container
-                    const resultItem = tag.closest('.entity-list-item');
-                    if (resultItem) {
-                        const snippet = resultItem.querySelector('.entity-item-snippet');
-                        if (snippet) {
-                            snippet.style.display = 'none';
-                        }
-                    }
                 }
                 
                 // Mark this tag as checked
@@ -37,15 +28,57 @@
             });
         }
 
+        function hideProtectedContent() {
+            // The trigger text/symbol to look for in the Title
+            const trigger = "🔒"; 
+
+            // Select all page list items (Search results, Lists)
+            const items = document.querySelectorAll('.entity-list-item');
+
+            items.forEach(item => {
+                // Find the title element inside the item
+                const titleElement = item.querySelector('.entity-list-item-name');
+                
+                if (titleElement && titleElement.textContent.includes(trigger)) {
+                    
+                    // Hide the explicit description text (if present)
+                    const desc = item.querySelector('.entity-list-item-desc');
+                    if (desc) desc.style.display = 'none';
+
+                    // Hide the Snippet/Preview ONLY (Preserving the path/breadcrumbs)
+                    // We target the specific snippet class instead of generic '.text-muted'
+                    const snippet = item.querySelector('.entity-list-item-snippet'); 
+                    if (snippet) {
+                        snippet.style.display = 'none';
+                    } else {
+                        // Fallback for older BookStack versions: 
+                        // Only hide .text-muted if it is NOT the path
+                        const mutedItems = item.querySelectorAll('.text-muted');
+                        mutedItems.forEach(el => {
+                            // The path usually contains links, the snippet is usually plain text
+                            if (el.querySelector('a') === null) { 
+                                el.style.display = 'none';
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
         // Run immediately
         hideProtectedTags();
+        hideProtectedContent();
 
-        //  Run on standard load
-        document.addEventListener("DOMContentLoaded", hideProtectedTags);
+        // Run on standard load
+        document.addEventListener("DOMContentLoaded", function() {
+            hideProtectedTags();
+            hideProtectedContent();
+        });
 
         // Watchdog for dynamic content (search results appearing later)
         const observer = new MutationObserver(function(mutations) {
             hideProtectedTags();
+            hideProtectedContent();
         });
 
         observer.observe(document.body, {
@@ -53,51 +86,5 @@
             subtree: true
         });
     })();
-    </script>
-</div>
-
-<div class="print-hidden">
-    <footer class="px-xl py-m mt-xl border-top text-muted text-small">
-        <div class="container">
-        </div>
-    </footer>
-
-    <script nonce="{{ $cspNonce }}">
-    // Simple visual cleanup to hide the "Protected" tag pill if it slips through
-    document.addEventListener("DOMContentLoaded", function() {
-        const tags = document.querySelectorAll('.tag-item');
-        tags.forEach(tag => {
-            if (tag.innerText.trim() === 'Protected') {
-                tag.style.display = 'none';
-            }
-        });
-    });
-    document.addEventListener("DOMContentLoaded", function() {
-        // The trigger text/symbol to look for in the Title
-        // You can change this to "Protected" if you prefer text over the emoji
-        const trigger = "🔒"; 
-
-        // Select all page list items
-        const items = document.querySelectorAll('.entity-list-item');
-
-        items.forEach(item => {
-            // Find the title element inside the item
-            const titleElement = item.querySelector('.entity-list-item-name');
-            
-            if (titleElement) {
-                // Check if the title contains our trigger symbol/word
-                if (titleElement.textContent.includes(trigger)) {
-                    
-                    // 1. Hide the explicit description text
-                    const desc = item.querySelector('.entity-list-item-desc');
-                    if (desc) desc.style.display = 'none';
-
-                    // 2. Hide the auto-generated grey preview text
-                    const snippet = item.querySelector('.text-muted'); 
-                    if (snippet) snippet.style.display = 'none';
-                }
-            }
-        });
-    });
     </script>
 </div>
