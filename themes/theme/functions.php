@@ -88,7 +88,7 @@ Event::listen(RouteMatched::class, function (RouteMatched $event) {
 });
 
 // --------------------------------------------------------------------------------
-// BACKEND ROUTES (PIN VALIDATION)
+// BACKEND ROUTES (PIN LOGIC)
 // --------------------------------------------------------------------------------
 if (!app()->routesAreCached()) {
     // Check PIN
@@ -106,7 +106,6 @@ if (!app()->routesAreCached()) {
         }
 
         if ($input && $targetPin && (string)$input === (string)$targetPin) {
-            // Unlock THIS specific page for 5 seconds
             $unlockedPages = Session::get('secure_unlocked_pages', []);
             $unlockedPages[$pageId] = time() + 5; 
             Session::put('secure_unlocked_pages', $unlockedPages);
@@ -117,30 +116,48 @@ if (!app()->routesAreCached()) {
         return redirect($redirect)->with('pin_error', 'Invalid Access Code');
     })->middleware('web');
 
-    // Enable Lock
+    // Enable Lock & Add Emoji
     Route::post('/secure-lock-page', function () {
         $pageId = request()->input('page_id');
         $customPass = request()->input('custom_password');
         $redirectUrl = request()->input('redirect_to', '/');
         $page = Page::find($pageId);
+
         if ($page && userCan('page-update', $page)) {
+            // 1. Add Tag
             if (!$page->tags()->where('name', 'Protected')->exists()) {
                 $page->tags()->create(['name' => 'Protected', 'value' => $customPass]);
+                
+                // 2. Add Lock Emoji to Title
+                if (strpos($page->name, '🔒') === false) {
+                    $page->name = trim($page->name) . ' 🔒';
+                    $page->save();
+                }
+
                 Session::flash('success', 'PIN protection enabled.');
             }
         }
         return redirect($redirectUrl);
     })->middleware('web');
 
-    // Disable Lock
+    // Disable Lock & Remove Emoji
     Route::post('/secure-unlock-page', function () {
         $pageId = request()->input('page_id');
         $redirectUrl = request()->input('redirect_to', '/');
         $page = Page::find($pageId);
+
         if ($page && userCan('page-update', $page)) {
             $tag = $page->tags()->where('name', 'Protected')->first();
             if ($tag) {
+                // 1. Remove Tag
                 $tag->delete();
+
+                // 2. Remove Lock Emoji from Title
+                if (strpos($page->name, '🔒') !== false) {
+                    $page->name = trim(str_replace('🔒', '', $page->name));
+                    $page->save();
+                }
+
                 Session::flash('success', 'PIN protection removed.');
             }
         }
