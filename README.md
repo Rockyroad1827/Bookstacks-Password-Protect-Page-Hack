@@ -31,7 +31,7 @@ This guide assumes you are using the [BookStack Logical Theme System](https://ww
 | **Logic** | `functions.php` | `themes/my-theme/functions.php` | Handles backend interception and PIN validation. |
 | **Footer** | `footer.blade.php` | `themes/my-theme/layouts/parts/footer.blade.php` | Handles JS visual scrubbing of tags. |
 | **UI** | `entity-permissions.blade.php` | `themes/my-theme/form/entity-permissions.blade.php` | Adds the lock interface to the permissions page. |
-| **CLI Tool** | `manage-locks.php` | `/var/www/bookstack/manage-locks.php` | **Place in BookStack Root**. Admin tool for managing locks. |
+| **CLI Tool** | `ManageLocksCommand.php` | `themes/my-theme/app/Console/Commands/ManageLocksCommand.php` | **sudo php artisan bookstack:manage-locks**. Admin tool for managing locks. |
 
 ### 2. Configuration
 Open your BookStack `.env` file and add a Master PIN. This is used if a page is locked but no custom password is set.
@@ -53,8 +53,8 @@ SECURE_PAGE_PIN=123456
 
 The page title will automatically update to include "🔒" to indicate its protected status.
 
-### 4. Usage: CLI Tool (manage-locks.php)
-You can manage locks directly from the terminal using manage-locks.php. This is useful for auditing protected pages, resetting forgotten PINs, or bulk unlocking content.
+### 4. Usage: CLI Tool 
+You can manage locks directly from the terminal using `php artisan bookstack:manage-pages`. This is useful for auditing protected pages, resetting forgotten PINs, or bulk unlocking content.
 
 How to run it
 Open your terminal and navigate to your BookStack root directory (e.g., /var/www/bookstack).
@@ -62,12 +62,11 @@ Open your terminal and navigate to your BookStack root directory (e.g., /var/www
 Run the script using PHP:
 
 ```bash
-cd <bookstack root directory>
-php manage-locks.php
+php artisan bookstack:manage-locks
 ```
 
 > [!NOTE]
-> When you run the script, you will see a list of all currently protected pages:
+> When you run the command, you will see a list of all currently protected pages:
 
 ```Plaintext
 🔒 BookStack Secure Page Manager
@@ -84,7 +83,7 @@ To Edit a Lock:
 
 Type the ID number (e.g., 2) and press Enter.
 ```
-The script will show the current status and ask for a new password.
+The command will show the current status and ask for a new password.
 
 ```Plaintext
 Selected: HR Confidential 🔒
