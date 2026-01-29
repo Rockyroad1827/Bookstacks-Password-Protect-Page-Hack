@@ -21,7 +21,6 @@
 <div class="print-hidden">
     <footer class="px-xl py-m mt-xl border-top text-muted text-small">
         <div class="container">
-            <p>&copy; BookStack</p>
         </div>
     </footer>
 
@@ -103,3 +102,4 @@
     })();
     </script>
 </div>
+
