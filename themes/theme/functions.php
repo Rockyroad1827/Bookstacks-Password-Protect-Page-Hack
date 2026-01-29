@@ -267,3 +267,21 @@ View::composer([
         });
     }
 });
+
+// --------------------------------------------------------------------------------
+// REGISTER CUSTOM ARTISAN COMMAND
+// --------------------------------------------------------------------------------
+if (app()->runningInConsole()) {
+    // 1. Manually load the class file
+    $commandFile = __DIR__ . '/app/Console/Commands/ManageLocksCommand.php';
+    
+    if (file_exists($commandFile)) {
+        require_once $commandFile;
+
+        // 2. Register the command with Laravel
+        // FIX: Use the concrete Application class instead of the Artisan facade
+        \Illuminate\Console\Application::starting(function ($artisan) {
+            $artisan->resolveCommands([\BookStack\Console\Commands\ManageLocksCommand::class]);
+        });
+    }
+}
