@@ -1,7 +1,7 @@
 <?php
 /** @var \BookStack\Permissions\PermissionFormData $data */
 
-// --- AUTO-RENAME & STATUS LOGIC ---
+// --- CHECK STATUS ---
 $isProtected = false;
 $hasCustomPass = false;
 
@@ -10,33 +10,6 @@ if($model instanceof \BookStack\Entities\Models\Page) {
     $tag = $model->tags()->where('name', 'Protected')->first();
     $isProtected = !is_null($tag);
     $hasCustomPass = $isProtected && !empty($tag->value);
-
-    // Check if the actual Page Name needs updating in the DB
-    $currentName = $model->name;
-    $lockSymbol = '🔒'; 
-    $hasLockSymbol = strpos($currentName, $lockSymbol) !== false;
-    $nameChanged = false;
-
-    // Protected, but missing the symbol -> Rename to add it
-    if ($isProtected && !$hasLockSymbol) {
-        $model->name = trim($currentName) . ' ' . $lockSymbol;
-        $nameChanged = true;
-    }
-    // Not Protected, but still has symbol -> Rename to remove it
-    elseif (!$isProtected && $hasLockSymbol) {
-        $model->name = trim(str_replace($lockSymbol, '', $currentName));
-        $nameChanged = true;
-    }
-
-    // Save changes to Database if needed
-    if ($nameChanged) {
-        $model->save();
-        // Update the $title variable locally for this specific view render
-        // so it matches the new database value immediately
-        if (isset($title)) {
-             $title = $model->name; 
-        }
-    }
 }
 ?>
 
@@ -51,9 +24,7 @@ if($model instanceof \BookStack\Entities\Models\Page) {
 
     <div class="grid half left-focus v-end gap-m wrap">
         <div>
-            {{-- Display the (potentially updated) title --}}
             <h1 class="list-heading">{{ $title }}</h1>
-            
             <p class="text-muted mb-s">
                 {{ trans('entities.permissions_desc') }}
                 @if($model instanceof \BookStack\Entities\Models\Book)
@@ -192,7 +163,7 @@ if($model instanceof \BookStack\Entities\Models\Page) {
     <form id="form-secure-lock" action="/secure-lock-page" method="POST" style="display: none;">
         {!! csrf_field() !!}
         <input type="hidden" name="page_id" value="{{ $model->id }}">
-        {{-- Redirect back to this permissions page so the Rename Logic at the top runs immediately --}}
+        {{-- Redirect back to this permissions page --}}
         <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
     </form>
 
