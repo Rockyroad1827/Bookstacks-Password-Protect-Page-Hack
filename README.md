@@ -54,7 +54,7 @@ SECURE_PAGE_PIN=123456
 The page title will automatically update to include "🔒" to indicate its protected status.
 
 ### 4. Usage: CLI Tool 
-You can manage locks directly from the terminal using `php artisan bookstack:manage-pages`. This is useful for auditing protected pages, resetting forgotten PINs, or bulk unlocking content.
+You can manage locks directly from the terminal using `php artisan bookstack:manage-locks`. This is useful for auditing protected pages, resetting forgotten PINs, or bulk unlocking content.
 
 How to run it
 Open your terminal and navigate to your BookStack root directory (e.g., /var/www/bookstack).
