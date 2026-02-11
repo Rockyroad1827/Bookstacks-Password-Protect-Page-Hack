@@ -52,12 +52,45 @@ SECURE_PAGE_PIN=123456
 > If you leave the password blank, the page will require the SECURE_PAGE_PIN defined in your .env.
 
 The page title will automatically update to include "🔒" to indicate its protected status.
+### 4. API Integration
 
-### 4. Parent Deletion
+Protected pages are blocked from the standard BookStack API (/api/pages/{id}) by default. You will receive a 403 Forbidden error if you attempt to access them normally.
+
+To access a locked page via API, you must provide the PIN using one of the following methods.
+
+#### Method 1: Custom Header (Recommended)
+
+> [!Note]
+> Replace `Page_ID` with The selected page ID, 
+> Replace `PIN_CODE` with your pages Pin code, 
+> Replace `Token_ID` and `Token_Secret` with the API ID and Secret made in the user Settings
+
+Add the X-PIN-Code header to your request.
+
+Bash
+```
+curl --request GET \
+  --url 'https://wiki.yourdomain.com/api/pages/PAGE_ID' \
+  --header 'Authorization: Token YOUR_TOKEN_ID:YOUR_TOKEN_SECRET' \
+  --header 'X-PIN-Code: PIN_CODE'
+```  
+#### Method 2: Query Parameter
+Add pin_code to the URL query string.
+
+Bash
+```
+curl --request GET \
+  --url '[https://wiki.yourdomain.com/api/pages/PAGE_ID?pin_code=PIN_CODE]' \
+  --header 'Authorization: Token YOUR_TOKEN_ID:YOUR_TOKEN_SECRET'
+```
+> [!NOTE]
+> The PIN provided must match either the page's Custom Password or the Master PIN, depending on how the page was locked.
+
+### 5. Parent Deletion
 Users will be asked to Unlock, Move or delete locked pages before parents can be deleted (Shelf, Book, Chapter).
 This is to stop abuse of admin permissions if they haven't got access to the Locked file. It also goes under the prosumption that the file is locked for an important reason stopping loss of important data 
 
-### 5. Usage: CLI Tool 
+### 6. Usage: CLI Tool 
 You can manage locks directly from the terminal using `php artisan bookstack:manage-locks`. This is useful for auditing protected pages, resetting forgotten PINs, or bulk unlocking content.
 
 How to run it
