@@ -153,5 +153,3 @@ To Edit the master pin:
 
 Type "M" and follow the prompts
 ```
-
-**Full Changelog**: https://github.com/Rockyroad1827/Bookstacks-Password-Protect-Page-Hack/commits/Bookstack-Hack
