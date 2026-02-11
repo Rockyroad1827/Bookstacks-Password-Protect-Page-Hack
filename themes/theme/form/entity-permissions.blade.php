@@ -4,12 +4,16 @@
 // --- CHECK STATUS ---
 $isProtected = false;
 $hasCustomPass = false;
+$allowApi = false;
 
 if($model instanceof \BookStack\Entities\Models\Page) {
-    // Check for the tag
+    // Check for Protected tag
     $tag = $model->tags()->where('name', 'Protected')->first();
     $isProtected = !is_null($tag);
     $hasCustomPass = $isProtected && !empty($tag->value);
+
+    // Check for AllowAPI tag
+    $allowApi = $model->tags()->where('name', 'AllowAPI')->exists();
 }
 ?>
 
@@ -36,7 +40,6 @@ if($model instanceof \BookStack\Entities\Models\Page) {
         </div>
     </div>
 
-    {{-- WARNINGS --}}
     @if($model instanceof \BookStack\Entities\Models\Bookshelf)
         <p class="text-warn">{{ trans('entities.shelves_permissions_cascade_warning') }}</p>
     @endif
@@ -50,7 +53,6 @@ if($model instanceof \BookStack\Entities\Models\Page) {
 
     <hr>
 
-    {{-- ROLE PERMISSIONS LIST --}}
     <div refs="entity-permissions@role-container" class="item-list mt-m mb-m">
         @foreach($data->permissionsWithRoles() as $permission)
             @include('form.entity-permissions-row', [
@@ -116,8 +118,18 @@ if($model instanceof \BookStack\Entities\Models\Page) {
                     {{-- Right Side: Controls --}}
                     <div>
                         @if($isProtected)
-                            {{-- UNLOCK BUTTON --}}
-                            <div style="text-align: right;">
+                            <div class="flex-container-row items-center gap-m">
+                                {{-- API TOGGLE BUTTON --}}
+                                <button type="submit" form="form-secure-api-toggle" class="button small outline" 
+                                    style="{{ $allowApi ? 'color: #27ae60; border-color: #27ae60;' : 'color: #666; border-color: #ccc;' }}">
+                                    @if($allowApi)
+                                        @icon('check-circle') API: Unlocked
+                                    @else
+                                        @icon('cancel') API: Locked
+                                    @endif
+                                </button>
+
+                                {{-- UNLOCK BUTTON --}}
                                 <button type="submit" form="form-secure-unlock" class="button outline small" style="color: #c0392b; border-color: #c0392b;">
                                     @icon('close') Disable Lock
                                 </button>
@@ -160,14 +172,22 @@ if($model instanceof \BookStack\Entities\Models\Page) {
     HIDDEN FORMS
 --}}
 @if($model instanceof \BookStack\Entities\Models\Page)
+    {{-- Form to Lock Page --}}
     <form id="form-secure-lock" action="/secure-lock-page" method="POST" style="display: none;">
         {!! csrf_field() !!}
         <input type="hidden" name="page_id" value="{{ $model->id }}">
-        {{-- Redirect back to this permissions page --}}
         <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
     </form>
 
+    {{-- Form to Unlock Page --}}
     <form id="form-secure-unlock" action="/secure-unlock-page" method="POST" style="display: none;">
+        {!! csrf_field() !!}
+        <input type="hidden" name="page_id" value="{{ $model->id }}">
+        <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
+    </form>
+
+    {{-- Form to Toggle API --}}
+    <form id="form-secure-api-toggle" action="/secure-toggle-api" method="POST" style="display: none;">
         {!! csrf_field() !!}
         <input type="hidden" name="page_id" value="{{ $model->id }}">
         <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
