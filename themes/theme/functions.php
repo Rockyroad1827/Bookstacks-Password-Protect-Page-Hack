@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Routing\Events\RouteMatched;
 
 // --------------------------------------------------------------------------------
-// Page Lock SEARCH BLOCKER (Raw Request Intercept)
+// 1. SEARCH BLOCKER (Raw Request Intercept)
 // --------------------------------------------------------------------------------
 // Immediately blocks search requests for "Protected" tags to prevent leaks.
 if (isset($_SERVER['REQUEST_URI'])) {
@@ -20,18 +20,13 @@ if (isset($_SERVER['REQUEST_URI'])) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
-// Page Lock Logic
+// Page Lock Logic & Helpers
 ///////////////////////////////////////////////////////////////////////////////////
 
-// --------------------------------------------------------------------------------
-// HELPER: CHECK IF SPECIFIC PAGE IS UNLOCKED
-// --------------------------------------------------------------------------------
+// Check if a specific page is currently unlocked in the user's session
 if (!function_exists('isPageUnlocked')) {
     function isPageUnlocked($pageId) {
-        // Retrieve the list of unlocked pages: [ PageID => Timestamp ]
         $unlockedPages = Session::get('secure_unlocked_pages', []);
-        
-        // Check if this ID exists and the timestamp is in the future
         if (isset($unlockedPages[$pageId]) && $unlockedPages[$pageId] > time()) {
             return true;
         }
@@ -39,9 +34,7 @@ if (!function_exists('isPageUnlocked')) {
     }
 }
 
-// --------------------------------------------------------------------------------
-// HELPER: GET REQUIRED PIN
-// --------------------------------------------------------------------------------
+// Get the effective PIN for a page (Custom or Master)
 if (!function_exists('getSecurePagePin')) {
     function getSecurePagePin($page) {
         $tag = $page->tags()->where('name', 'Protected')->first();
@@ -51,34 +44,56 @@ if (!function_exists('getSecurePagePin')) {
 }
 
 // --------------------------------------------------------------------------------
-// EXPORT INTERCEPTOR (PDF, HTML, TXT, MD, ZIP)
+// ROUTE INTERCEPTORS (API & Exports)
 // --------------------------------------------------------------------------------
-// Listens for ANY route that matches. If the URL contains '/export/', we verify access.
 Event::listen(RouteMatched::class, function (RouteMatched $event) {
     $request = request();
     $path = $request->path();
 
-    // Check if this is an export URL
-    if (strpos($path, '/export/') !== false) {
+    // --- API PROTECTION ---
+    // Intercepts calls to /api/pages/{id}
+    // We use a regex check or simple string check to catch the ID
+    if (preg_match('#^api/pages/(\d+)$#', $path, $matches)) {
+        $pageId = $matches[1];
         
-        // Try to find the Page Slug in the route parameters
-        // BookStack usually names this parameter 'pageSlug' or 'page'
+        if ($pageId) {
+            $page = Page::find($pageId);
+            
+            // If page exists and is Protected
+            if ($page && $page->tags()->where('name', 'Protected')->exists()) {
+                
+                // Check if "AllowAPI" tag is present (Bypass PIN)
+                if ($page->tags()->where('name', 'AllowAPI')->exists()) {
+                    return; // Allow access
+                }
+
+                // Check for PIN in Header (X-PIN-Code) or Query Param (pin_code)
+                $providedPin = $request->header('X-PIN-Code') ?? $request->query('pin_code');
+                $realPin = getSecurePagePin($page);
+
+                if (!$providedPin || (string)$providedPin !== (string)$realPin) {
+                    // Fail immediately with 403 JSON
+                    response()->json([
+                        'error' => [
+                            'code' => 403,
+                            'message' => 'Access denied. Provide valid PIN or enable API access for this page.'
+                        ]
+                    ], 403)->send();
+                    exit();
+                }
+            }
+        }
+    }
+
+    // --- EXPORT PROTECTION (PDF, HTML, etc) ---
+    if (strpos($path, '/export/') !== false) {
         $slug = $event->route->parameter('pageSlug');
-
         if ($slug) {
-            // Find the page in the DB
             $page = Page::where('slug', $slug)->first();
-
-            // Check if Page exists, is Protected, and is NOT unlocked
             if ($page && $page->tags()->where('name', 'Protected')->exists()) {
                 if (!isPageUnlocked($page->id)) {
-                    
-                    // Block Download & Redirect to Lock Screen
-                    // We attach the CURRENT export URL as the "redirect_after_unlock" target.
-                    // Once unlocked, the user will be bounced right back here to start the download.
                     $currentExportUrl = $request->fullUrl();
                     $lockScreenUrl = $page->getUrl() . '?redirect_after_unlock=' . urlencode($currentExportUrl);
-                    
                     header("Location: " . $lockScreenUrl);
                     exit();
                 }
@@ -88,10 +103,11 @@ Event::listen(RouteMatched::class, function (RouteMatched $event) {
 });
 
 // --------------------------------------------------------------------------------
-// BACKEND ROUTES (PIN LOGIC)
+// BACKEND ROUTES (PIN Logic & Toggles)
 // --------------------------------------------------------------------------------
 if (!app()->routesAreCached()) {
-    // Check PIN
+    
+    // Validate PIN
     Route::post('/secure-pin-check', function () {
         $input = request()->input('pin_code');
         $pageId = request()->input('page_id');
@@ -107,10 +123,9 @@ if (!app()->routesAreCached()) {
 
         if ($input && $targetPin && (string)$input === (string)$targetPin) {
             $unlockedPages = Session::get('secure_unlocked_pages', []);
-            $unlockedPages[$pageId] = time() + 5; 
+            $unlockedPages[$pageId] = time() + 5; // Valid for 5 seconds (enough to load page)
             Session::put('secure_unlocked_pages', $unlockedPages);
             Session::save();
-            
             return redirect($redirect);
         }
         return redirect($redirect)->with('pin_error', 'Invalid Access Code');
@@ -124,41 +139,57 @@ if (!app()->routesAreCached()) {
         $page = Page::find($pageId);
 
         if ($page && userCan('page-update', $page)) {
-            // 1. Add Tag
             if (!$page->tags()->where('name', 'Protected')->exists()) {
                 $page->tags()->create(['name' => 'Protected', 'value' => $customPass]);
                 
-                // 2. Add Lock Emoji to Title
                 if (strpos($page->name, '🔒') === false) {
                     $page->name = trim($page->name) . ' 🔒';
                     $page->save();
                 }
-
                 Session::flash('success', 'PIN protection enabled.');
             }
         }
         return redirect($redirectUrl);
     })->middleware('web');
 
-    // Disable Lock & Remove Emoji
+    // 3. Disable Lock & Clean up Tags
     Route::post('/secure-unlock-page', function () {
         $pageId = request()->input('page_id');
         $redirectUrl = request()->input('redirect_to', '/');
         $page = Page::find($pageId);
 
         if ($page && userCan('page-update', $page)) {
-            $tag = $page->tags()->where('name', 'Protected')->first();
-            if ($tag) {
-                // 1. Remove Tag
-                $tag->delete();
+            // Remove Protected Tag
+            $page->tags()->where('name', 'Protected')->delete();
+            
+            // Remove AllowAPI Tag (Cleanup)
+            $page->tags()->where('name', 'AllowAPI')->delete();
 
-                // 2. Remove Lock Emoji from Title
-                if (strpos($page->name, '🔒') !== false) {
-                    $page->name = trim(str_replace('🔒', '', $page->name));
-                    $page->save();
-                }
+            // Remove Emoji
+            if (strpos($page->name, '🔒') !== false) {
+                $page->name = trim(str_replace('🔒', '', $page->name));
+                $page->save();
+            }
+            Session::flash('success', 'PIN protection removed.');
+        }
+        return redirect($redirectUrl);
+    })->middleware('web');
 
-                Session::flash('success', 'PIN protection removed.');
+    // 4. Toggle API Access
+    Route::post('/secure-toggle-api', function () {
+        $pageId = request()->input('page_id');
+        $redirectUrl = request()->input('redirect_to', '/');
+        $page = Page::find($pageId);
+
+        if ($page && userCan('page-update', $page)) {
+            $apiTag = $page->tags()->where('name', 'AllowAPI')->first();
+            
+            if ($apiTag) {
+                $apiTag->delete();
+                Session::flash('success', 'API access disabled for this page.');
+            } else {
+                $page->tags()->create(['name' => 'AllowAPI', 'value' => 'true']);
+                Session::flash('success', 'API access enabled for this page.');
             }
         }
         return redirect($redirectUrl);
@@ -166,19 +197,14 @@ if (!app()->routesAreCached()) {
 }
 
 // --------------------------------------------------------------------------------
-// LOCK SCREEN GENERATOR
+// LOCK SCREEN HTML GENERATOR
 // --------------------------------------------------------------------------------
 if (!function_exists('renderSecureLockScreen')) {
     function renderSecureLockScreen($title = 'Protected Content', $pageId = null) {
         $errorHtml = Session::has('pin_error') ? 
             '<div class="text-neg bold mb-m" style="background: #ffebeb; border: 1px solid #cb2431; padding: 10px; border-radius: 4px;">' . Session::get('pin_error') . '</div>' : '';
         $pageIdInput = $pageId ? '<input type="hidden" name="page_id" value="' . $pageId . '">' : '';
-
-        // Detect Redirect Intent
-        $targetRedirect = request()->get('redirect_after_unlock');
-        if (!$targetRedirect) {
-            $targetRedirect = request()->fullUrl();
-        }
+        $targetRedirect = request()->get('redirect_after_unlock') ?: request()->fullUrl();
 
         return '
         <div class="flex-fill flex-container-column justify-center items-center" style="min-height: 60vh;">
@@ -211,8 +237,40 @@ if (!function_exists('renderSecureLockScreen')) {
 }
 
 // --------------------------------------------------------------------------------
-// VIEW INTERCEPTOR: SHOW PAGE (Main Content)
+// PARENT DELETION BLOCKER (Safeguard)
 // --------------------------------------------------------------------------------
+// Prevents deleting shelves/books/chapters if they contain protected pages
+View::composer(['shelves.delete', 'books.delete', 'chapters.delete'], function ($view) {
+    $data = $view->getData();
+    $entity = null;
+    $protectedCount = 0;
+
+    if (isset($data['shelf'])) {
+        $entity = $data['shelf'];
+        foreach ($entity->books as $book) {
+            $protectedCount += $book->pages()->whereHas('tags', function($q){ $q->where('name', 'Protected'); })->count();
+        }
+    } elseif (isset($data['book'])) {
+        $entity = $data['book'];
+        $protectedCount = $entity->pages()->whereHas('tags', function($q){ $q->where('name', 'Protected'); })->count();
+    } elseif (isset($data['chapter'])) {
+        $entity = $data['chapter'];
+        $protectedCount = $entity->pages()->whereHas('tags', function($q){ $q->where('name', 'Protected'); })->count();
+    }
+
+    if ($entity && $protectedCount > 0) {
+        Session::flash('protected_deletion_blocked', $protectedCount);
+        Session::save(); // Force save to ensure popup appears
+        header("Location: " . $entity->getUrl());
+        exit();
+    }
+});
+
+// --------------------------------------------------------------------------------
+// VIEW INTERCEPTORS (Display Logic)
+// --------------------------------------------------------------------------------
+
+// SHOW PAGE: Replace content with lock screen
 View::composer(['pages.show'], function ($view) {
     $data = $view->getData();
     if (!isset($data['page'])) return;
@@ -223,12 +281,8 @@ View::composer(['pages.show'], function ($view) {
     }
 });
 
-// --------------------------------------------------------------------------------
-// VIEW INTERCEPTOR: ACTIONS (Edit, Copy, Move, etc.)
-// --------------------------------------------------------------------------------
-View::composer([
-    'pages.edit', 'pages.move', 'pages.revisions', 'pages.delete', 'pages.copy', 'form.entity-permissions'
-], function ($view) {
+// PAGE ACTIONS: Redirect to lock screen if trying to edit/move/delete
+View::composer(['pages.edit', 'pages.move', 'pages.revisions', 'pages.delete', 'pages.copy', 'form.entity-permissions'], function ($view) {
     $data = $view->getData();
     $page = $data['page'] ?? $data['model'] ?? null;
 
@@ -242,12 +296,8 @@ View::composer([
     }
 });
 
-// --------------------------------------------------------------------------------
-// LIST VIEW SCRUBBER
-// --------------------------------------------------------------------------------
-View::composer([
-    'partials.entity-list-item', 'partials.page-list-item', 'partials.book-content-list-item'
-], function ($view) {
+// LIST SCRUBBER: Remove preview text from search results/lists
+View::composer(['partials.entity-list-item', 'partials.page-list-item', 'partials.book-content-list-item'], function ($view) {
     $data = $view->getData();
     $entity = $data['entity'] ?? $data['page'] ?? null;
 
@@ -262,6 +312,7 @@ View::composer([
             $entity->preview_html = '';
         }
 
+        // Hide the 'Protected' tag from the visual list
         $entity->tags = $entity->tags->filter(function($tag) {
             return strtolower($tag->name) !== 'protected';
         });
@@ -269,61 +320,15 @@ View::composer([
 });
 
 // --------------------------------------------------------------------------------
-// REGISTER CUSTOM ARTISAN COMMAND
+// REGISTER ARTISAN COMMAND
 // --------------------------------------------------------------------------------
 if (app()->runningInConsole()) {
-    // 1. Manually load the class file
     $commandFile = __DIR__ . '/app/Console/Commands/ManageLocksCommand.php';
-    
     if (file_exists($commandFile)) {
         require_once $commandFile;
-
-        // 2. Register the command with Laravel
-        // FIX: Use the concrete Application class instead of the Artisan facade
+        // Fix: Use Application::starting instead of Artisan::starting
         \Illuminate\Console\Application::starting(function ($artisan) {
             $artisan->resolveCommands([\BookStack\Console\Commands\ManageLocksCommand::class]);
         });
     }
 }
-// --------------------------------------------------------------------------------
-// PARENT DELETION BLOCKER (Shelves, Books, Chapters)
-// --------------------------------------------------------------------------------
-// Prevents deletion if the entity contains any "Protected" pages.
-View::composer(['shelves.delete', 'books.delete', 'chapters.delete'], function ($view) {
-    $data = $view->getData();
-    $entity = null;
-    $protectedCount = 0;
-
-    // Identify Entity Type and Count Protected Children
-    if (isset($data['shelf'])) {
-        $entity = $data['shelf'];
-        foreach ($entity->books as $book) {
-            $protectedCount += $book->pages()->whereHas('tags', function($q){
-                $q->where('name', 'Protected');
-            })->count();
-        }
-    } elseif (isset($data['book'])) {
-        $entity = $data['book'];
-        $protectedCount = $entity->pages()->whereHas('tags', function($q){
-            $q->where('name', 'Protected');
-        })->count();
-    } elseif (isset($data['chapter'])) {
-        $entity = $data['chapter'];
-        $protectedCount = $entity->pages()->whereHas('tags', function($q){
-            $q->where('name', 'Protected');
-        })->count();
-    }
-
-    // If protected content is found, block access
-    if ($entity && $protectedCount > 0) {
-        // FLASH A SPECIAL SESSION KEY TO TRIGGER THE POPUP
-        Session::flash('protected_deletion_blocked', $protectedCount);
-        
-        // CRITICAL FIX: Force Laravel to write the session before we exit
-        Session::save();
-        
-        // Redirect back to the entity page
-        header("Location: " . $entity->getUrl());
-        exit();
-    }
-});
