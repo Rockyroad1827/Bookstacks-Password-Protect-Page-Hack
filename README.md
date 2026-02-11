@@ -54,6 +54,19 @@ SECURE_PAGE_PIN=123456
 The page title will automatically update to include "🔒" to indicate its protected status.
 ### 4. API Integration
 
+#### Manage API Access
+Once a page is locked, a new toggle button will appear in the permissions view: **"API: Locked"** / **"API: Unlocked"**.
+
+* **Button: API: Locked**
+    * **Status:** Secure.
+    * **Behavior:** External API calls to this page are **blocked** by default.
+    * **Access:** To access data via API, you must provide the correct PIN in the request header (`X-PIN-Code`).
+
+* **Button: API: Unlocked**
+    * **Status:** Open for public get requests.
+    * **Behavior:** External API calls are **allowed** for this specific page without a PIN being supplied.
+    * **Use Case:** Useful if you need a script or integration to read the page content automatically, while keeping the page locked for human users in the browser.
+
 Protected pages are blocked from the standard BookStack API (/api/pages/{id}) by default. You will receive a 403 Forbidden error if you attempt to access them normally.
 
 To access a locked page via API, you must provide the PIN using one of the following methods.
