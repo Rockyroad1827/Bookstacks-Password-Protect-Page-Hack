@@ -11,7 +11,6 @@
                     This item contains <strong>{{ session('protected_deletion_blocked') }}</strong> PIN-protected page(s).<br>
                     <span class="small">You must unlock or move these pages before this item can be deleted.</span>
                 </p>
-                {{-- REMOVED inline onclick, ADDED ID --}}
                 <button type="button" id="close-lock-modal" class="button primary">Understood</button>
             </div>
         </div>
@@ -24,11 +23,48 @@
         </div>
     </footer>
 
+    <style>
+        /* Base Lock Icon Styling (Positioning) */
+        .secure-lock-icon {
+            margin-left: auto;      
+            align-self: center;     
+            color: #d9534f;         
+            opacity: 0.8;
+            padding-left: 10px;
+            display: flex;          
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        /* DEFAULT SIZE (Small - for Navigation/Sidebar) */
+        .secure-lock-icon svg {
+            width: 16px;
+            height: 16px;
+            transition: all 0.2s ease;
+        }
+
+        /* MAIN MENU SIZE (Bigger - inside the Main Content area) */
+        #main-content .secure-lock-icon svg, 
+        .page-content .secure-lock-icon svg {
+            width: 24px;  /* <--- BIGGER IN MAIN MENU */
+            height: 24px;
+        }
+
+        /* Force Flexbox on list items */
+        .entity-list-item, .book-content-item, .chapter-list-item, .entity-list-item-component {
+            display: flex !important;
+            align-items: center !important; 
+            flex-wrap: nowrap !important;   
+            width: 100%;
+        }
+    </style>
+
     <script nonce="{{ $cspNonce }}">
     (function() {
         console.log("Authorized Footer Script Running");
 
-        // SETUP MODAL CLOSING LOGIC
+        // --- MODAL CLOSING LOGIC ---
         const closeBtn = document.getElementById('close-lock-modal');
         if (closeBtn) {
             closeBtn.addEventListener('click', function() {
@@ -37,62 +73,74 @@
             });
         }
 
-        // HIDE TAGS LOGIC
-        function hideProtectedTags() {
-            const tags = document.querySelectorAll('.tag-item');
+        // --- HIDE CONTENT & ADD ICON LOGIC ---
+        function handleProtectedContent() {
+            const selectors = [
+                '.entity-list-item', 
+                '.book-content-item', 
+                '.page-list-item', 
+                '.chapter-list-item',
+                '.entity-list-item-component'
+            ];
             
-            tags.forEach(tag => {
-                if (tag.dataset.protectedChecked) return;
-
-                const tagText = tag.innerText.trim();
-                if (tagText.startsWith('Protected')) {
-                    tag.style.display = 'none';
-                    tag.dataset.protectedHidden = "true";
-                }
-                tag.dataset.protectedChecked = "true";
-            });
-        }
-
-        // HIDE CONTENT LOGIC
-        function hideProtectedContent() {
-            const trigger = "🔒"; 
-            const items = document.querySelectorAll('.entity-list-item');
+            const items = document.querySelectorAll(selectors.join(', '));
+            const invisibleMarker = '\u200B'; 
+            
+            // SVG Icon HTML (No hardcoded size, controlled by CSS)
+            const lockIconHtml = `
+                <div class="secure-lock-icon" title="PIN Protected">
+                    <svg fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                    </svg>
+                </div>`;
 
             items.forEach(item => {
-                const titleElement = item.querySelector('.entity-list-item-name');
-                
-                if (titleElement && titleElement.textContent.includes(trigger)) {
-                    
-                    const desc = item.querySelector('.entity-list-item-desc');
-                    if (desc) desc.style.display = 'none';
+                let isLocked = false;
 
-                    const snippet = item.querySelector('.entity-list-item-snippet'); 
-                    if (snippet) {
-                        snippet.style.display = 'none';
-                    } else {
-                        const mutedItems = item.querySelectorAll('.text-muted');
-                        mutedItems.forEach(el => {
-                            if (el.querySelector('a') === null) { 
-                                el.style.display = 'none';
-                            }
-                        });
+                // Is the Invisible Marker in the Title?
+                const titleEl = item.querySelector('h4, .entity-list-item-name, a.text-book, a.text-page, a.text-chapter');
+                if (titleEl && titleEl.innerText.includes(invisibleMarker)) {
+                    isLocked = true;
+                }
+
+                // Is the "Protected" tag present?
+                if (!isLocked) {
+                    const tags = item.querySelectorAll('.tag-item');
+                    tags.forEach(tag => {
+                        if (tag.innerText.trim() === 'Protected') isLocked = true;
+                    });
+                }
+
+                if (isLocked) {
+                    // Hide Content
+                    const targets = item.querySelectorAll(
+                        '.entity-list-item-desc, .entity-list-item-snippet, .book-content-item-snippet, .text-muted, p.text-muted, .entity-list-item-text'
+                    );
+                    targets.forEach(el => {
+                        if (el.querySelector('a') === null && !el.classList.contains('tags')) { 
+                            el.style.display = 'none';
+                        }
+                    });
+
+                    // Add Lock Icon (APPEND TO END)
+                    if (!item.querySelector('.secure-lock-icon')) {
+                        item.insertAdjacentHTML('beforeend', lockIconHtml);
                     }
                 }
             });
+            
+            // Visually hide "Protected" tags
+            document.querySelectorAll('.tag-item').forEach(tag => {
+                if(tag.innerText.trim() === 'Protected') tag.style.display = 'none';
+            });
         }
 
-        // EXECUTION
-        hideProtectedTags();
-        hideProtectedContent();
-
-        document.addEventListener("DOMContentLoaded", function() {
-            hideProtectedTags();
-            hideProtectedContent();
-        });
+        // --- EXECUTION ---
+        document.addEventListener("DOMContentLoaded", handleProtectedContent);
+        handleProtectedContent();
 
         const observer = new MutationObserver(function(mutations) {
-            hideProtectedTags();
-            hideProtectedContent();
+            handleProtectedContent();
         });
 
         observer.observe(document.body, {
@@ -102,4 +150,3 @@
     })();
     </script>
 </div>
-
