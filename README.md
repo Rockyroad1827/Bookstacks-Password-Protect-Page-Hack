@@ -15,9 +15,11 @@ A lightweight, PIN-based protection layer for [BookStack](https://www.bookstacka
 * **Per-Page Locking:** Secure specific pages without altering global role permissions.
 * **Dual PIN Modes:** Pages can use a specific "Custom Password" or fall back to a global "Master PIN" defined in your `.env` file.
 * **Native UI Integration:** Controls are embedded directly into the Page "Permissions" view.
-* **Visual Indicators:** Automatically adds a lock symbol (🔒) to page titles and status indicators in the UI.
+* **Visual Indicators:** Automatically adds a lock symbol " <img width="20" height="30" alt="image" src="https://github.com/user-attachments/assets/bca95f54-6e28-4d81-b46a-80f755d412c4" />
+" to page cards and status indicators in the permissions UI.
 * **Search & Preview Scrubbing:** Prevents protected content from leaking into search results or list previews by clearing preview text for protected items.
 * **CLI Management Tool:** Includes a terminal script to manage locks, update passwords, and remove protections.
+
 
 ---
 
@@ -51,7 +53,6 @@ SECURE_PAGE_PIN=123456
 > [!WARNING]
 > If you leave the password blank, the page will require the SECURE_PAGE_PIN defined in your .env.
 
-The page title will automatically update to include "🔒" to indicate its protected status.
 ### 4. API Integration
 
 #### Manage API Access
@@ -123,8 +124,8 @@ php artisan bookstack:manage-locks
 ================================
 ID    | Page Title                               | Current Password    
 ----------------------------------------------------------------------
-[1]   | Server Access Codes 🔒                  | [Master PIN]        
-[2]   | HR Confidential 🔒                      | secret123           
+[1]   | Server Access Codes                   | [Master PIN]        
+[2]   | HR Confidential                       | secret123           
 ----------------------------------------------------------------------
 Current .env Master PIN: ****
 ```
@@ -137,7 +138,7 @@ Type the ID number (e.g., 2) and press Enter.
 The command will show the current status and ask for a new password.
 
 ```Plaintext
-Selected: HR Confidential 🔒
+Selected: HR Confidential 
 Current Password: secret123
 Enter NEW password (leave empty to use Master PIN, or type 'DELETE' to unlock):
 Options:
