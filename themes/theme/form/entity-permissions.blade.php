@@ -85,11 +85,13 @@ if($model instanceof \BookStack\Entities\Models\Page) {
                 'inheriting' => !$model->permissions()->where('role_id', '=', 0)->exists(),
             ])
     </div>
-
+    <hr class="mb-m">
     {{-- NATIVE-STYLE PIN CONTROL --}}
     @if($model instanceof \BookStack\Entities\Models\Page)
+        
+        {{-- CARD 1: MAIN LOCK CONTROL --}}
         <div class="mb-m mt-l">
-            <div class="card p-m" style="border: 1px solid #ddd; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div class="card p-m" style="border: 1px solid #444444; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div class="flex-container-row justify-space-between items-center wrap gap-m">
                     
                     {{-- Left Side: Status Text --}}
@@ -115,25 +117,12 @@ if($model instanceof \BookStack\Entities\Models\Page) {
                         </p>
                     </div>
                     
-                    {{-- Right Side: Controls --}}
+                    {{-- Right Side: Unlock/Lock Button --}}
                     <div>
                         @if($isProtected)
-                            <div class="flex-container-row items-center gap-m">
-                                {{-- API TOGGLE BUTTON --}}
-                                <button type="submit" form="form-secure-api-toggle" class="button small outline" 
-                                    style="{{ $allowApi ? 'color: #27ae60; border-color: #27ae60;' : 'color: #666; border-color: #ccc;' }}">
-                                    @if($allowApi)
-                                        @icon('check-circle') API: Unlocked
-                                    @else
-                                        @icon('cancel') API: Locked
-                                    @endif
-                                </button>
-
-                                {{-- UNLOCK BUTTON --}}
-                                <button type="submit" form="form-secure-unlock" class="button outline small" style="color: #c0392b; border-color: #c0392b;">
-                                    @icon('close') Disable Lock
-                                </button>
-                            </div>
+                            <button type="submit" form="form-secure-unlock" class="button outline small" style="color: #c0392b; border-color: #c0392b;">
+                                @icon('close') Disable Lock
+                            </button>
                         @else
                             {{-- LOCK FORM with Input --}}
                             <div class="flex-container-row gap-s items-center">
@@ -148,6 +137,43 @@ if($model instanceof \BookStack\Entities\Models\Page) {
                 </div>
             </div>
         </div>
+
+        {{-- CARD 2: API CONTROL (Completely Separate Container) --}}
+        @if($isProtected)
+            <div class="mb-m">
+                <div class="card p-m" style="border: 1px solid #444444; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div class="flex-container-row justify-space-between items-center wrap gap-m">
+                        
+                        {{-- Left Side: Description --}}
+                        <div style="flex: 1;">
+                            <div class="flex-container-row items-center gap-xs">
+                                <span class="bold">@icon('code') API Access Control</span>
+                            </div>
+                            <p class="text-muted small mb-none mt-xs">
+                                @if($allowApi)
+                                    External scripts can read this page <strong>without</strong> a PIN.
+                                @else
+                                    External scripts must provide the PIN via the <code>X-PIN-Code</code> header.
+                                @endif
+                            </p>
+                        </div>
+
+                        {{-- Right Side: Toggle Button --}}
+                        <div>
+                            <button type="submit" form="form-secure-api-toggle" class="button small outline" 
+                                style="{{ $allowApi ? 'color: #27ae60; border-color: #27ae60;' : 'color: #666; border-color: #444444;' }}">
+                                @if($allowApi)
+                                    @icon('check-circle') API: Unlocked
+                                @else
+                                    @icon('cancel') API: Locked
+                                @endif
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
     @endif
     {{-- END PIN CONTROL --}}
 
